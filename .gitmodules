@@ -1,0 +1,6 @@
+[submodule "pyfs"]
+	path = pyfs
+	url = https://github.com/jacoblondon/pyfs
+[submodule "pyngine"]
+	path = pyngine
+	url = https://github.com/jacoblondon/pyngine
