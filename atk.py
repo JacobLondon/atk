@@ -3,7 +3,8 @@ import json
 import math
 import random
 import time
-from typing import List
+from threading import Thread
+from typing import List, Dict
 
 from pyngine import *
 from pyfs import filesystem
@@ -12,6 +13,7 @@ with open("settings.json", "r") as s:
     settings = json.load(s)
 
 client = filesystem.FileSystemUDPClient(settings["ip"], settings["port"])
+using_network = settings["server"]["exists"]
 now = time.time()
 
 ID_GOOD = 0
@@ -34,7 +36,7 @@ SHOT_COOLDOWN = 0.1
 ENEMY_COOLDOWN = 0.5
 ENEMY_SIZE = 30
 PLAYER_SIZE = 50
-PLAYER_HEALTH = 100
+PLAYER_HEALTH = 10000
 
 ENEMY_VELOCITY = 3
 
@@ -85,6 +87,9 @@ class Shot:
     def serialize(self):
         return self.__dict__
 
+def shotlist_fromdictlist(dictlist: List[Dict]):
+    return [Shot(**d) for d in dictlist]
+
 # enemies only
 atk_lookup = [None for _ in range(SHOOT_COUNT)]
 atk_lookup[SHOOT_1]      = lambda x, y: [Shot(x, y, DOWN, 0)]
@@ -112,26 +117,35 @@ def getatk(id, x, y):
     return atk_lookup[id](x, y)
 
 class Game(Controller):
+    Classgood = None
+    Classbad = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         this = self
 
         # this is owned by the server
-        self.players = []
+        self.players = {}
         self.uid = random.randint(0, 100_000)
 
         class Good(Creature):
-            def __init__(self):
-                self.uid = this.uid
-                self.id = ID_GOOD
-                self.x = this.screen_width / 2
-                self.y = this.screen_height - 100
-                self.hp = PLAYER_HEALTH
-                self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
-                self.shoot = SHOOT_3
-                self.shots: List[Shot] = []
-                self.cooldown = now
+            def __init__(self, dictdata=None):
+                if dictdata is None:
+                    self.hb = 0 # heart beat
+                    self.uid = this.uid
+                    self.id = ID_GOOD
+                    self.x = this.screen_width / 2
+                    self.y = this.screen_height - 100
+                    self.hp = PLAYER_HEALTH
+                    self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
+                    self.shoot = SHOOT_3
+                    self.shots: List[Shot] = []
+                    self.cooldown = now
+                else:
+                    self.__dict__ = dictdata
+                    self.shots = shotlist_fromdictlist(dictdata["shots"])
 
+            def load_interface(self):
                 self.hp_label = Label(this, str(self.hp))
                 Event(this, self.newshot, keys=(pg.K_SPACE,))
 
@@ -159,7 +173,7 @@ class Game(Controller):
                     shot.update()
 
                 # do damage check, even tho square, hitboxes are circles
-                for player in this.players:
+                for _, player in this.players.items():
                     if player.id == ID_BAD:
                         for minion in player.minions:
                             for shot in minion.shots:
@@ -179,12 +193,14 @@ class Game(Controller):
                 return {
                     "uid": self.uid,
                     "id": self.id,
+                    "hb": self.hb,
                     "x": self.x,
                     "y": self.y,
                     "hp": self.hp,
                     "color": self.color,
                     "shots": [shot.serialize() for shot in self.shots],
                 }
+        Game.Classgood = Good
 
         class Enemy(Creature):
             def __init__(self, x: int, y: int, m: int, id: int):
@@ -194,12 +210,12 @@ class Game(Controller):
                 self.id = id # shot id
                 self.shots = []
                 self.hp = 5
-                self.color = Color['crimson']
+                self.color = (255, 0, 0)
                 self.cooldown = now
 
             def update(self):
                 # do damage check, even tho square, hitboxes are circles
-                for player in this.players:
+                for _, player in this.players.items():
                     if player.id == ID_GOOD:
                         for shot in player.shots:
                             if abs(self.x - shot.x) < ENEMY_SIZE / 2:
@@ -232,6 +248,7 @@ class Game(Controller):
 
         class Bad(Creature):
             def __init__(self):
+                self.hb = 0
                 self.uid = this.uid
                 self.id = ID_BAD
                 self.hp = 100
@@ -242,6 +259,7 @@ class Game(Controller):
                 self.shottext = atk_name[self.shottype]
                 self.cooldown = now
 
+            def load_interface(self):
                 self.hp_label = Label(this, str(self.hp), z=9999)
                 self.spawn_label = Label(this, self.text, z=10000)
                 self.spawn_label.loc = (0, 15)
@@ -262,6 +280,15 @@ class Game(Controller):
                 Event(this, self.shot_sides,  keys=(pg.K_r,))
                 Event(this, self.shot_star,   keys=(pg.K_t,))
                 Event(this, self.shot_spiral, keys=(pg.K_y,))
+
+            def load_minions(self, minion_list):
+                ret = []
+                for miniondict in minion_list:
+                    m = Enemy(0, 0, 0, 0)
+                    m.__dict__ = miniondict
+                    m.shots = shotlist_fromdictlist(miniondict["shots"])
+                    ret.append(m)
+                self.minions = ret
 
             def newemeny(self):
                 if time.time() < self.cooldown + ENEMY_COOLDOWN:
@@ -340,9 +367,11 @@ class Game(Controller):
                 return {
                     "uid": self.uid,
                     "id": self.id,
+                    "hb": self.hb,
                     "hp": self.hp,
                     "minions": [minion.serialize() for minion in self.minions],
                 }
+        Game.Classbad = Bad
 
         # just assume the user has a unique name lol
         self.player: Creature
@@ -350,31 +379,53 @@ class Game(Controller):
             self.player = Good()
         else:
             self.player = Bad()
+        self.player.load_interface()
 
         Event(self, self.exit_program, keys=(pg.K_ESCAPE,))
         Drawer(self, self.move)
 
+        self.fd = -1
+        self.th = None
+        if using_network:
+            self.fd = client.open(str(self.uid), "AtkFile", "server")
+            self.th = Thread(target=self.update_network)
+            self.th.start()
+
+    def __del__(self):
+        if self.fd != -1:
+            client.close(self.fd)
+            self.th.join()
+
     def serialize(self):
-        return self.__dict__
+        return self.player.serialize()
 
-    def send(self):
-        pass
-
-    def read(self):
-        pass
+    def update_network(self):
+        # definitely using the network, no need to check here
+        while not self.done:
+            buf = self.serialize()
+            if len(buf) < 10000:
+                client.write(self.fd, buf)
+            state = json.loads(client.read(self.fd))
+            for uid, playerdata in state.items():
+                if playerdata["id"] == ID_GOOD:
+                    self.players[uid] = Game.Classgood(playerdata)
+                else:
+                    b = Game.Classbad()
+                    b.load_minions(playerdata["minions"])
+                    self.players[uid] = b
 
     def move(self):
         global now
         now = time.time()
 
+        self.player.hb = now
         self.player.update()
         if self.player.hp > 0:
             self.player.draw()
 
-        # we don't own just update
-        for player in self.players:
-            if player.uid != self.player.uid:
-                player.update()
+        # we don't update just draw
+        for uid, player in self.players.items():
+            if uid != self.player.uid:
                 player.draw()
 
 if __name__ == '__main__':

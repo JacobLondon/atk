@@ -1,12 +1,12 @@
 {
-    "ip": "0.0.0.0",
+    "ip": "localhost",
     "port": 9001,
     "player": {
         "comment": "Set 'type' to 'good' to play as a ship, and to 'bad' to play as the boss",
-        "type": "bad"
+        "type": "good"
     },
-    "server exists": {
-        "comment": "Set 'exists' to 'true' if client should connect, else 'false' to simulate",
-        "exists": false
+    "server": {
+        "comment": "Set 'exists' to 'true' if client should connect, else 'false' for singleplayer",
+        "exists": true
     }
 }
