@@ -2,6 +2,7 @@ import copy
 import json
 import math
 import random
+import signal
 import time
 from threading import Thread
 from typing import List, Dict, Tuple
@@ -405,9 +406,14 @@ class Game(Controller):
         self.fd = -1
         self.th = None
         if using_network:
+            # allow to kill the process until connection
+            signal.signal(signal.SIGINT, lambda sig, frame: exit(0))
+
             self.fd = client.open(str(self.uid), "AtkFile", "server")
             self.th = Thread(target=self.update_network)
             self.th.start()
+
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     def on_close(self):
         if self.fd != -1:
