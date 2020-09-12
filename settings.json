@@ -3,10 +3,36 @@
     "port": 9001,
     "player": {
         "comment": "Set 'type' to 'good' to play as a ship, and to 'bad' to play as the boss",
-        "type": "good"
+        "type": "bad"
     },
     "server": {
-        "comment": "Set 'exists' to 'true' if client should connect, else 'false' for singleplayer",
+        "comment": "Set 'exists' to 'true' for multiplayer and 'false' for singleplayer",
         "exists": true
+    },
+
+    "If you're a player, you don't need to mess with the settings below": "OK?",
+
+    "config": {
+        "good": {
+            "cooldown": 0.1,
+            "size": 30,
+            "health": 2000
+        },
+        "bad": {
+            "cooldown": 0.5,
+            "health": 100
+        },
+        "minion": {
+            "cooldown": 0.5,
+            "size": 30,
+            "health": 5,
+            "velocity": 3
+        },
+        "shot": {
+            "size": 10,
+            "velocity": 10
+        },
+        "uid_max": 100000,
+        "resolution": [600, 720]
     }
 }

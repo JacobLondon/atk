@@ -4,17 +4,39 @@ import math
 import random
 import time
 from threading import Thread
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from pyngine import *
 from pyfs import filesystem
 
+###############################################################################
+
 with open("settings.json", "r") as s:
     settings = json.load(s)
+
+GOOD_COOLDOWN:   float = settings["config"]["good"]["cooldown"]
+GOOD_SIZE:       int   = settings["config"]["good"]["size"]
+GOOD_HEALTH:     int   = settings["config"]["good"]["health"]
+
+BAD_COOLDOWN:    float = settings["config"]["bad"]["cooldown"]
+BAD_HEALTH:      int   = settings["config"]["bad"]["health"]
+
+MINION_COOLDOWN: float = settings["config"]["minion"]["cooldown"]
+MINION_SIZE:     int   = settings["config"]["minion"]["size"]
+MINION_HEALTH:   int   = settings["config"]["minion"]["health"]
+MINION_VELOCITY: int   = settings["config"]["minion"]["velocity"]
+
+SHOT_VELOCITY:   int   = settings["config"]["shot"]["velocity"]
+SHOT_SIZE:       int   = settings["config"]["shot"]["size"]
+
+UID_MAX: int = settings["config"]["uid_max"]
+RESOLUTION: Tuple[int, int] = tuple(settings["config"]["resolution"])
 
 client = filesystem.FileSystemUDPClient(settings["ip"], settings["port"])
 using_network = settings["server"]["exists"]
 now = time.time()
+
+###############################################################################
 
 ID_GOOD = 0
 ID_BAD = 1
@@ -29,16 +51,6 @@ SHOOT_COUNT = 6
 
 UP = -1
 DOWN = 1
-SHOT_VELOCITY = 10
-SHOT_SIZE = 10
-SHOT_COOLDOWN = 0.1
-
-ENEMY_COOLDOWN = 0.5
-ENEMY_SIZE = 30
-PLAYER_SIZE = 50
-PLAYER_HEALTH = 10000
-
-ENEMY_VELOCITY = 3
 
 MOVEMENT_NONE = 0   # standstill
 MOVEMENT_NORMAL = 1 # move down slowly
@@ -54,10 +66,10 @@ movement_name = {
 }
 movement_lookup = {
     MOVEMENT_NONE: (lambda   x, y: (x, y)),
-    MOVEMENT_NORMAL: (lambda x, y: (x, y + ENEMY_VELOCITY)),
-    MOVEMENT_WEAVE: (lambda  x, y: (x + math.sin(now * math.pi) * 5, y + ENEMY_VELOCITY)),
-    MOVEMENT_LEFT: (lambda   x, y: (x - ENEMY_VELOCITY, y + ENEMY_VELOCITY)),
-    MOVEMENT_RIGHT: (lambda  x, y: (x + ENEMY_VELOCITY, y + ENEMY_VELOCITY)),
+    MOVEMENT_NORMAL: (lambda x, y: (x, y + MINION_VELOCITY)),
+    MOVEMENT_WEAVE: (lambda  x, y: (x + math.sin(now * math.pi) * 5, y + MINION_VELOCITY)),
+    MOVEMENT_LEFT: (lambda   x, y: (x - MINION_VELOCITY, y + MINION_VELOCITY)),
+    MOVEMENT_RIGHT: (lambda  x, y: (x + MINION_VELOCITY, y + MINION_VELOCITY)),
 }
 
 def getmove(m, x, y):
@@ -126,31 +138,36 @@ class Game(Controller):
 
         # this is owned by the server
         self.players = {}
-        self.uid = random.randint(0, 100_000)
+        self.uid = random.randint(0, UID_MAX)
 
         class Good(Creature):
             def __init__(self, dictdata=None):
                 if dictdata is None:
-                    self.hb = 0 # heart beat
                     self.uid = this.uid
                     self.id = ID_GOOD
                     self.x = this.screen_width / 2
                     self.y = this.screen_height - 100
-                    self.hp = PLAYER_HEALTH
+                    self.hp = GOOD_HEALTH
                     self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
                     self.shoot = SHOOT_1
                     self.shots: List[Shot] = []
                     self.cooldown = now
+                    self.power = 0
                 else:
                     self.__dict__ = dictdata
                     self.shots = shotlist_fromdictlist(dictdata["shots"])
 
             def load_interface(self):
-                self.hp_label = Label(this, str(self.hp))
+                self.hp_label = Label(this, f"HP: {self.hp}", z=9999)
+                self.power_label = Label(this, f"Power: {self.power}", z=10000)
+                self.power_label.loc = (0, 15)
                 Event(this, self.newshot, keys=(pg.K_SPACE,))
 
             def newshot(self):
-                if now < self.cooldown + SHOT_COOLDOWN:
+                if now < self.cooldown + GOOD_COOLDOWN:
+                    return
+
+                if self.hp <= 0:
                     return
 
                 self.cooldown = now
@@ -165,7 +182,8 @@ class Game(Controller):
                     self.shots.append(Shot(self.x, self.y, UP, -1))
 
             def update(self):
-                self.hp_label.text = str(self.hp)
+                self.hp_label.text = f"HP: {self.hp}"
+                self.power_label.text = f"Power: {self.power}"
                 self.x = this.mouse.x
                 self.y = this.mouse.y
 
@@ -177,14 +195,15 @@ class Game(Controller):
                     if player.id == ID_BAD:
                         for minion in player.minions:
                             for shot in minion.shots:
-                                if abs(self.x - shot.x) < PLAYER_SIZE / 2:
+                                if abs(self.x - shot.x - SHOT_SIZE / 2) < GOOD_SIZE / 2 and abs(self.y - shot.y - SHOT_SIZE / 2) < GOOD_SIZE / 2:
                                     self.hp -= 1
 
                 # clear off screen
                 self.shots = list(filter(lambda shot: 0 <= shot.x <= this.screen_width and 0 <= shot.y <= this.screen_height, self.shots))
 
             def draw(self):
-                this.painter.fill_rect(self.x - PLAYER_SIZE / 2, self.y - PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE, self.color)
+                if self.hp > 0:
+                    this.painter.fill_rect(self.x - GOOD_SIZE / 2, self.y - GOOD_SIZE / 2, GOOD_SIZE, GOOD_SIZE, self.color)
 
                 for shot in self.shots:
                     this.painter.fill_rect(shot.x - SHOT_SIZE / 2, shot.y - SHOT_SIZE / 2, SHOT_SIZE, SHOT_SIZE, self.color)
@@ -193,7 +212,6 @@ class Game(Controller):
                 return {
                     "uid": self.uid,
                     "id": self.id,
-                    "hb": self.hb,
                     "x": self.x,
                     "y": self.y,
                     "hp": self.hp,
@@ -210,7 +228,6 @@ class Game(Controller):
                 self.id = id # shot id
                 self.shots = []
                 self.hp = 5
-                self.color = (255, 0, 0)
                 self.cooldown = now
 
             def update(self):
@@ -218,12 +235,12 @@ class Game(Controller):
                 for _, player in this.players.items():
                     if player.id == ID_GOOD:
                         for shot in player.shots:
-                            if abs(self.x - shot.x) < ENEMY_SIZE / 2:
+                            if abs(self.x - shot.x - SHOT_SIZE / 2) < MINION_SIZE / 2 and abs(self.y - shot.y - SHOT_SIZE / 2) < MINION_SIZE / 2:
                                 self.hp -= 1
 
                 self.x, self.y = getmove(self.m, self.x, self.y)
 
-                if now > self.cooldown + ENEMY_COOLDOWN:
+                if now > self.cooldown + MINION_COOLDOWN:
                     self.shots.extend(getatk(self.id, self.x, self.y))
                     self.cooldown = now
                 
@@ -233,7 +250,7 @@ class Game(Controller):
                 self.shots = list(filter(lambda shot: 0 <= shot.x <= this.screen_width and 0 <= shot.y <= this.screen_height, self.shots))
 
             def draw(self):
-                this.painter.fill_rect(self.x - ENEMY_SIZE / 2, self.y - ENEMY_SIZE / 2, ENEMY_SIZE, ENEMY_SIZE, (255, 0, 0))
+                this.painter.fill_rect(self.x - MINION_SIZE / 2, self.y - MINION_SIZE / 2, MINION_SIZE, MINION_SIZE, (255, 0, 0))
                 for shot in self.shots:
                     this.painter.fill_rect(shot.x - SHOT_SIZE / 2, shot.y - SHOT_SIZE / 2, SHOT_SIZE, SHOT_SIZE, (255, 0, 0))
 
@@ -248,10 +265,9 @@ class Game(Controller):
 
         class Bad(Creature):
             def __init__(self):
-                self.hb = 0
                 self.uid = this.uid
                 self.id = ID_BAD
-                self.hp = 100
+                self.hp = BAD_HEALTH
                 self.minions: Enemy = []
                 self.spawntype = MOVEMENT_NORMAL
                 self.shottype = SHOOT_1
@@ -260,7 +276,7 @@ class Game(Controller):
                 self.cooldown = now
 
             def load_interface(self):
-                self.hp_label = Label(this, str(self.hp), z=9999)
+                self.hp_label = Label(this, f"HP: {self.hp}", z=9999)
                 self.spawn_label = Label(this, self.text, z=10000)
                 self.spawn_label.loc = (0, 15)
                 self.shot_label = Label(this, self.shottext, z=10001)
@@ -291,10 +307,13 @@ class Game(Controller):
                 self.minions = ret
 
             def newemeny(self):
-                if time.time() < self.cooldown + ENEMY_COOLDOWN:
+                if time.time() < self.cooldown + BAD_COOLDOWN:
                     return
 
                 if this.mouse.y > this.screen_height / 2:
+                    return
+
+                if self.hp <= 0:
                     return
 
                 self.cooldown = now
@@ -345,7 +364,7 @@ class Game(Controller):
                 self.text = movement_name[self.spawntype]
 
             def update(self):
-                self.hp_label.text = str(self.hp)
+                self.hp_label.text = f"HP: {self.hp}"
                 self.spawn_label.text = self.text
                 self.shot_label.text = self.shottext
 
@@ -367,7 +386,6 @@ class Game(Controller):
                 return {
                     "uid": self.uid,
                     "id": self.id,
-                    "hb": self.hb,
                     "hp": self.hp,
                     "minions": [minion.serialize() for minion in self.minions],
                 }
@@ -381,7 +399,7 @@ class Game(Controller):
             self.player = Bad()
         self.player.load_interface()
 
-        Event(self, self.exit_program, keys=(pg.K_ESCAPE,))
+        Event(self, self.exit_loop, keys=(pg.K_ESCAPE,))
         Drawer(self, self.move)
 
         self.fd = -1
@@ -391,10 +409,13 @@ class Game(Controller):
             self.th = Thread(target=self.update_network)
             self.th.start()
 
-    def __del__(self):
+    def on_close(self):
         if self.fd != -1:
             client.close(self.fd)
             self.th.join()
+
+        # overriding parent, need this here
+        pg.quit()
 
     def serialize(self):
         return self.player.serialize()
@@ -402,26 +423,38 @@ class Game(Controller):
     def update_network(self):
         # definitely using the network, no need to check here
         while not self.done:
+            # remove players that are not received
+            received_uids = []
+
+            # keep it short enough
             buf = self.serialize()
             if len(buf) < 10000:
                 client.write(self.fd, buf)
+
+            # resolve shared state
             state = json.loads(client.read(self.fd))
             for uid, playerdata in state.items():
+                received_uids.append(uid)
+
                 if int(uid) == self.player.uid:
                     continue
+
                 if playerdata["id"] == ID_GOOD:
                     self.players[uid] = Game.Classgood(playerdata)
                 else:
                     b = Game.Classbad()
                     b.load_minions(playerdata["minions"])
                     self.players[uid] = b
+
+            # keep only the players who are received
+            self.players = {k: v for k, v in self.players.items() if k in received_uids}
+
             time.sleep(0.05)
 
     def move(self):
         global now
         now = time.time()
 
-        self.player.hb = now
         self.player.update()
         if self.player.hp > 0:
             self.player.draw()
@@ -432,5 +465,5 @@ class Game(Controller):
                 player.draw()
 
 if __name__ == '__main__':
-    game = Game(name="Atk", resolution=(600, 720), grid=(80, 60), debug=False)
+    game = Game(name="Atk", resolution=RESOLUTION, grid=(80, 60), debug=False)
     game.run()
