@@ -12,6 +12,7 @@
 
     "If you're a player, you don't need to mess with the settings below": "OK?",
 
+    "server_ip": "0.0.0.0",
     "config": {
         "good": {
             "cooldown": 0.1,
