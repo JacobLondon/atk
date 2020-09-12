@@ -138,7 +138,7 @@ class Game(Controller):
                     self.y = this.screen_height - 100
                     self.hp = PLAYER_HEALTH
                     self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
-                    self.shoot = SHOOT_3
+                    self.shoot = SHOOT_1
                     self.shots: List[Shot] = []
                     self.cooldown = now
                 else:
@@ -407,12 +407,15 @@ class Game(Controller):
                 client.write(self.fd, buf)
             state = json.loads(client.read(self.fd))
             for uid, playerdata in state.items():
+                if int(uid) == self.player.uid:
+                    continue
                 if playerdata["id"] == ID_GOOD:
                     self.players[uid] = Game.Classgood(playerdata)
                 else:
                     b = Game.Classbad()
                     b.load_minions(playerdata["minions"])
                     self.players[uid] = b
+            time.sleep(0.05)
 
     def move(self):
         global now
