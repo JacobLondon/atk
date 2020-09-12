@@ -434,27 +434,31 @@ class Game(Controller):
 
             # keep it short enough
             buf = self.serialize()
-            if len(buf) < 10000:
+            if self.player.hp > 0:
                 client.write(self.fd, buf)
 
             # resolve shared state
-            state = json.loads(client.read(self.fd))
-            for uid, playerdata in state.items():
-                received_uids.append(uid)
+            message = client.read(self.fd)
+            #print(message)
+            state = json.loads(message)
+            if type(state) is dict:
+                for uid, playerdata in state.items():
+                    received_uids.append(uid)
 
-                if int(uid) == self.player.uid:
-                    continue
+                    if int(uid) == self.player.uid:
+                        continue
 
-                if playerdata["id"] == ID_GOOD:
-                    self.players[uid] = Game.Classgood(playerdata)
-                else:
-                    b = Game.Classbad()
-                    b.load_minions(playerdata["minions"])
-                    self.players[uid] = b
+                    if playerdata["id"] == ID_GOOD:
+                        self.players[uid] = Game.Classgood(playerdata)
+                    else:
+                        b = Game.Classbad()
+                        b.load_minions(playerdata["minions"])
+                        self.players[uid] = b
 
-            # keep only the players who are received
-            self.players = {k: v for k, v in self.players.items() if k in received_uids}
-
+                # keep only the players who are received
+                self.players = {k: v for k, v in self.players.items() if k in received_uids}
+            else:
+                break
             time.sleep(0.05)
 
     def move(self):

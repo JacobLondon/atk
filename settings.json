@@ -3,7 +3,7 @@
     "port": 9001,
     "player": {
         "comment": "Set 'type' to 'good' to play as a ship, and to 'bad' to play as the boss",
-        "type": "bad"
+        "type": "good"
     },
     "server": {
         "comment": "Set 'exists' to 'true' for multiplayer and 'false' for singleplayer",
