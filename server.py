@@ -25,5 +25,5 @@ class AtkFile(filetypes.File):
             del state[self.name]
 
 if __name__ == '__main__':
-    server = filesystem.FileSystemUDPServer(settings["server_ip"], settings["port"])
+    server = filesystem.FileSystemTCPServer(settings["server_ip"], settings["port"])
     server.start()

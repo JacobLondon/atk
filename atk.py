@@ -34,7 +34,7 @@ SHOT_SIZE:       int   = settings["config"]["shot"]["size"]
 UID_MAX: int = settings["config"]["uid_max"]
 RESOLUTION: Tuple[int, int] = tuple(settings["config"]["resolution"])
 
-client = filesystem.FileSystemUDPClient(settings["ip"], settings["port"])
+client = filesystem.FileSystemTCPClient(settings["ip"], settings["port"])
 using_network = settings["server"]["exists"]
 now = time.time()
 
@@ -314,11 +314,11 @@ class Game(Controller):
 
                 Event(this, self.newemeny, keys=(pg.K_SPACE,))
 
-                Event(this, self.set_none,   keys=(pg.K_1))
-                Event(this, self.set_normal, keys=(pg.K_2))
-                Event(this, self.set_weave,  keys=(pg.K_3))
-                Event(this, self.set_left,   keys=(pg.K_4))
-                Event(this, self.set_right,  keys=(pg.K_5))
+                Event(this, self.set_none,   keys=(pg.K_1,))
+                Event(this, self.set_normal, keys=(pg.K_2,))
+                Event(this, self.set_weave,  keys=(pg.K_3,))
+                Event(this, self.set_left,   keys=(pg.K_4,))
+                Event(this, self.set_right,  keys=(pg.K_5,))
 
                 Event(this, self.shot_1,      keys=(pg.K_q,))
                 Event(this, self.shot_2,      keys=(pg.K_w,))
