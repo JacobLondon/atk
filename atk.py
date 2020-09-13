@@ -18,6 +18,7 @@ with open("settings.json", "r") as s:
 GOOD_COOLDOWN:   float = settings["config"]["good"]["cooldown"]
 GOOD_SIZE:       int   = settings["config"]["good"]["size"]
 GOOD_HEALTH:     int   = settings["config"]["good"]["health"]
+GOOD_UPGRADE:    int   = settings["config"]["good"]["upgrade"] # time to power increase
 
 BAD_COOLDOWN:    float = settings["config"]["bad"]["cooldown"]
 BAD_HEALTH:      int   = settings["config"]["bad"]["health"]
@@ -150,10 +151,10 @@ class Game(Controller):
                     self.y = this.screen_height - 100
                     self.hp = GOOD_HEALTH
                     self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
-                    self.shoot = SHOOT_1
                     self.shots: List[Shot] = []
                     self.cooldown = now
                     self.power = 0
+                    self.time_upgrade = now
                 else:
                     self.__dict__ = dictdata
                     self.shots = shotlist_fromdictlist(dictdata["shots"])
@@ -171,20 +172,47 @@ class Game(Controller):
                 if self.hp <= 0:
                     return
 
+                if now - self.time_upgrade > GOOD_UPGRADE:
+                    self.time_upgrade = now
+                    self.power += 1
+
                 self.cooldown = now
-                if self.shoot == SHOOT_1:
+
+                # single straight shot
+                if self.power == 0:
                     self.shots.append(Shot(self.x, self.y, UP, 0))
-                elif self.shoot == SHOOT_2:
-                    self.shots.append(Shot(self.x, self.y, UP, 1))
-                    self.shots.append(Shot(self.x, self.y, UP, -1))
+
+                # double straight shot
+                elif self.power == 1:
+                    self.shots.append(Shot(self.x + 10, self.y, UP, 0))
+                    self.shots.append(Shot(self.x - 10, self.y, UP, 0))
+
+                # double spread shot
+                elif self.power == 2:
+                    self.shots.append(Shot(self.x, self.y, UP, 0.5))
+                    self.shots.append(Shot(self.x, self.y, UP, -0.5))
+
+                # tri spread shot
+                elif self.power == 3:
+                    self.shots.append(Shot(self.x, self.y, UP, 0))
+                    self.shots.append(Shot(self.x, self.y, UP, 0.5))
+                    self.shots.append(Shot(self.x, self.y, UP, -0.5))
+
+                # quad shot
                 else:
-                    self.shots.append(Shot(self.x, self.y, UP, 0))
                     self.shots.append(Shot(self.x, self.y, UP, 1))
+                    self.shots.append(Shot(self.x, self.y, UP, 0.5))
+                    self.shots.append(Shot(self.x, self.y, UP, -0.5))
                     self.shots.append(Shot(self.x, self.y, UP, -1))
 
             def update(self):
-                self.hp_label.text = f"HP: {self.hp}"
-                self.power_label.text = f"Power: {self.power}"
+                if self.hp >= 0:
+                    self.hp_label.text = f"HP: {self.hp}"
+                    self.power_label.text = f"Power: {self.power}"
+                else:
+                    self.hp_label.text = "HP: 0"
+                    self.power_label.text = "Power: 0"
+
                 self.x = this.mouse.x
                 self.y = this.mouse.y
 
@@ -198,6 +226,7 @@ class Game(Controller):
                             for shot in minion.shots:
                                 if abs(self.x - shot.x - SHOT_SIZE / 2) < GOOD_SIZE / 2 and abs(self.y - shot.y - SHOT_SIZE / 2) < GOOD_SIZE / 2:
                                     self.hp -= 1
+                                    self.power = 0
 
                 # clear off screen
                 self.shots = list(filter(lambda shot: 0 <= shot.x <= this.screen_width and 0 <= shot.y <= this.screen_height, self.shots))
@@ -228,7 +257,7 @@ class Game(Controller):
                 self.m = m # movement pattern id
                 self.id = id # shot id
                 self.shots = []
-                self.hp = 5
+                self.hp = MINION_HEALTH
                 self.cooldown = now
 
             def update(self):
@@ -434,8 +463,7 @@ class Game(Controller):
 
             # keep it short enough
             buf = self.serialize()
-            if self.player.hp > 0:
-                client.write(self.fd, buf)
+            client.write(self.fd, buf)
 
             # resolve shared state
             message = client.read(self.fd)
@@ -471,7 +499,7 @@ class Game(Controller):
 
         # we don't update just draw
         for uid, player in self.players.items():
-            if uid != self.player.uid:
+            if uid != self.player.uid and player.hp >= 0:
                 player.draw()
 
 if __name__ == '__main__':
