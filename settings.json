@@ -17,7 +17,7 @@
         "good": {
             "cooldown": 0.1,
             "size": 30,
-            "health": 2000,
+            "health": 500,
             "upgrade": 5
         },
         "bad": {
@@ -27,7 +27,7 @@
         "minion": {
             "cooldown": 0.5,
             "size": 30,
-            "health": 10,
+            "health": 5,
             "velocity": 3
         },
         "shot": {
